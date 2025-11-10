@@ -25,9 +25,6 @@ interface Message {
 const CHAT_HISTORY_KEY = "pest_assessment_chat_history";
 
 export function FloatingChatWidget() {
-  const pathname = usePathname();
-  if (pathname === "/scout") return null;
-
   const [isVisible, setIsVisible] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [sessionId, setSessionId] = useState<string>("");
@@ -62,6 +59,15 @@ export function FloatingChatWidget() {
       setHasAnimated(true);
     }, 1500);
     return () => clearTimeout(timer);
+  }, []);
+
+  // Listen for open chat event from landing page
+  useEffect(() => {
+    const handleOpenChat = () => {
+      setIsChatOpen(true);
+    };
+    window.addEventListener("open-scout-chat", handleOpenChat);
+    return () => window.removeEventListener("open-scout-chat", handleOpenChat);
   }, []);
 
   // Load session and history on mount
