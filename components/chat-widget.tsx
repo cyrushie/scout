@@ -8,11 +8,11 @@ import {
   Upload,
   RotateCcw,
   Bot,
-  Bug,
+  Minus,
+  User,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { generateSessionId } from "@/lib/utils/session";
-import { usePathname } from "next/navigation";
 
 interface Message {
   id: string;
@@ -27,6 +27,7 @@ const CHAT_HISTORY_KEY = "pest_assessment_chat_history";
 export function FloatingChatWidget() {
   const [isVisible, setIsVisible] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(false);
   const [sessionId, setSessionId] = useState<string>("");
   const [sessionCreated, setSessionCreated] = useState(false);
   const [resetKey, setResetKey] = useState(0);
@@ -37,7 +38,7 @@ export function FloatingChatWidget() {
     {
       id: "1",
       content:
-        "Hi there! I'm Scout, your AI Pest Assessment Assistant. I help homeowners identify pest issues and recommend the best solutions — whether it's a quick DIY fix or something that needs a pro.",
+        "Hi there! I'm Scout 👋 What pest issue can I help you with today?",
       sender: "bot",
       timestamp: new Date(),
     },
@@ -52,11 +53,11 @@ export function FloatingChatWidget() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Fade in button after 2 seconds
+  // Fade in button after 1.5 seconds
   useEffect(() => {
     const timer = setTimeout(() => {
-      setIsVisible(true);
-      setHasAnimated(true);
+      setIsChatOpen(true);
+      setIsMinimized(false);
     }, 1500);
     return () => clearTimeout(timer);
   }, []);
@@ -65,6 +66,7 @@ export function FloatingChatWidget() {
   useEffect(() => {
     const handleOpenChat = () => {
       setIsChatOpen(true);
+      setIsMinimized(false);
     };
     window.addEventListener("open-scout-chat", handleOpenChat);
     return () => window.removeEventListener("open-scout-chat", handleOpenChat);
@@ -78,7 +80,6 @@ export function FloatingChatWidget() {
         setSessionId(savedSession);
         setSessionCreated(true);
 
-        // Load chat history from API
         try {
           const response = await fetch(
             `/api/get-chat-history?sessionId=${savedSession}`
@@ -145,12 +146,11 @@ export function FloatingChatWidget() {
         {
           id: "1",
           content:
-            "Hi there! I'm Scout, your AI Pest Assessment Assistant. I help homeowners identify pest issues and recommend the best solutions — whether it's a quick DIY fix or something that needs a pro.",
+            "Hi there! I'm Scout 👋 What pest issue can I help you with today?",
           sender: "bot",
           timestamp: new Date(),
         },
       ]);
-      setIsChatOpen(false);
     };
     window.addEventListener("chatbot-reset", handleReset);
     return () => window.removeEventListener("chatbot-reset", handleReset);
@@ -261,7 +261,7 @@ export function FloatingChatWidget() {
       return data.response;
     } catch (error) {
       console.error("Error getting AI response:", error);
-      return "I apologize, but I'm having trouble responding right now. Please try again or continue with your assessment.";
+      return "I apologize, but I'm having trouble responding right now. Please try again.";
     } finally {
       setIsLoading(false);
     }
@@ -275,13 +275,11 @@ export function FloatingChatWidget() {
     setInputValue("");
     setUploadedImage(null);
 
-    // Add user message immediately
     addUserMessage(
       textToSend || "Here's an image of the pest",
       imageToSend || undefined
     );
 
-    // Add loading indicator
     const loadingMessageId = `${Date.now()}-${Math.random()
       .toString(36)
       .substring(2, 9)}`;
@@ -294,7 +292,6 @@ export function FloatingChatWidget() {
     setMessages((prev) => [...prev, loadingMessage]);
     setIsLoading(true);
 
-    // Create session if needed
     let currentSessionId: string | null = sessionId;
     if (!sessionCreated) {
       currentSessionId = await createSession();
@@ -303,21 +300,19 @@ export function FloatingChatWidget() {
           prev.filter((msg) => msg.id !== loadingMessageId)
         );
         addBotMessage(
-          "Sorry, I'm having trouble starting the conversation. Please refresh and try again."
+          "Sorry, I'm having trouble starting the conversation. Please try again."
         );
         setIsLoading(false);
         return;
       }
     }
 
-    // Get bot response
     const response = await generateBotResponse(
       textToSend || "Can you identify this pest from the image?",
       imageToSend || undefined,
       currentSessionId
     );
 
-    // Replace loading message with actual response
     setMessages((prev) =>
       prev.map((msg) =>
         msg.id === loadingMessageId ? { ...msg, content: response } : msg
@@ -332,19 +327,11 @@ export function FloatingChatWidget() {
   };
 
   const handleReset = async () => {
-    console.log("🔄 Reset clicked!");
-
-    // Clear storage
     localStorage.removeItem("pest_assessment_session_id");
     if (sessionId) {
       sessionStorage.removeItem(`${CHAT_HISTORY_KEY}_${sessionId}`);
     }
-    console.log("🗑️ Cleared storage");
-
-    // Dispatch event to parent to remount component
     window.dispatchEvent(new Event("chatbot-reset"));
-
-    console.log("🔄 Reset complete - component will remount");
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -354,253 +341,264 @@ export function FloatingChatWidget() {
     }
   };
 
+  const toggleChat = () => {
+    if (isChatOpen) {
+      setIsChatOpen(false);
+      setIsMinimized(false);
+    } else {
+      setIsChatOpen(true);
+      setIsMinimized(false);
+    }
+  };
+
   return (
     <>
-      {/* Floating Chat Button */}
-      <button
-        onClick={() => setIsChatOpen(true)}
-        className={`fixed bottom-6 right-6 z-40 bg-accent text-accent-foreground rounded-full p-4 shadow-2xl hover:scale-110 transition-all duration-300 group ${
-          isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
-        } ${!hasAnimated ? "pointer-events-none" : ""}`}
-        aria-label="Open chat with Scout"
-      >
-        <MessageCircle className="w-6 h-6 group-hover:rotate-12 transition-transform duration-300" />
-        <div className="absolute -top-1 -right-1 w-3 h-3 bg-primary rounded-full animate-pulse" />
-      </button>
-
-      {/* Slide-in Chat Panel */}
-      <div
-        className={`fixed top-0 right-0 h-full w-full sm:w-[420px] md:w-[460px] bg-background border-l border-border shadow-2xl z-50 flex flex-col transition-transform duration-300 ease-out ${
-          isChatOpen ? "translate-x-0" : "translate-x-full"
-        }`}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 bg-accent border-b border-border">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-accent-foreground/10 flex items-center justify-center">
-              <Bug className="w-5 h-5 text-accent-foreground" />
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold text-accent-foreground">
-                Scout
-              </h2>
-              <p className="text-xs text-accent-foreground/80">
-                AI Pest Consultant
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleReset}
-              disabled={isLoading}
-              className="p-2 hover:bg-accent-foreground/10 rounded-lg transition-colors disabled:opacity-50"
-              title="Start new conversation"
-            >
-              <RotateCcw className="w-4 h-4 text-accent-foreground" />
-            </button>
-            <button
-              onClick={() => setIsChatOpen(false)}
-              className="p-2 hover:bg-accent-foreground/10 rounded-lg transition-colors"
-              aria-label="Close chat"
-            >
-              <X className="w-5 h-5 text-accent-foreground" />
-            </button>
-          </div>
-        </div>
-
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex ${
-                message.sender === "user" ? "justify-end" : "justify-start"
-              } animate-slide-up`}
-            >
-              <div
-                className={`max-w-[85%] rounded-2xl px-4 py-3 shadow-sm ${
-                  message.sender === "user"
-                    ? "bg-accent text-accent-foreground"
-                    : "bg-card text-card-foreground border border-border"
-                }`}
-              >
-                <div className="flex items-start gap-2">
-                  {message.sender === "bot" && (
-                    <div className="flex-shrink-0 mt-0.5">
-                      <Bot className="w-4 h-4 text-muted-foreground" />
-                    </div>
-                  )}
-                  <div className="text-sm leading-relaxed flex-1">
-                    {message.imageUrl && (
-                      <div className="mb-2 rounded-lg overflow-hidden border border-border">
-                        <img
-                          src={message.imageUrl}
-                          alt="Uploaded pest"
-                          className="max-w-full h-auto max-h-48 object-contain bg-muted/20"
-                        />
-                      </div>
-                    )}
-                    {message.content === "typing" ? (
-                      <div className="flex gap-1.5 py-1">
-                        <div
-                          className="w-2 h-2 bg-muted-foreground/60 rounded-full animate-bounce"
-                          style={{ animationDelay: "0ms" }}
-                        />
-                        <div
-                          className="w-2 h-2 bg-muted-foreground/60 rounded-full animate-bounce"
-                          style={{ animationDelay: "150ms" }}
-                        />
-                        <div
-                          className="w-2 h-2 bg-muted-foreground/60 rounded-full animate-bounce"
-                          style={{ animationDelay: "300ms" }}
-                        />
-                      </div>
-                    ) : message.sender === "bot" ? (
-                      <ReactMarkdown
-                        components={{
-                          p: ({ children }) => (
-                            <p className="mb-2 last:mb-0">{children}</p>
-                          ),
-                          ul: ({ children }) => (
-                            <ul className="list-disc list-inside mb-2 space-y-1">
-                              {children}
-                            </ul>
-                          ),
-                          ol: ({ children }) => (
-                            <ol className="list-decimal list-inside mb-2 space-y-1">
-                              {children}
-                            </ol>
-                          ),
-                          li: ({ children }) => (
-                            <li className="ml-2">{children}</li>
-                          ),
-                          strong: ({ children }) => (
-                            <strong className="font-semibold">
-                              {children}
-                            </strong>
-                          ),
-                          em: ({ children }) => (
-                            <em className="italic">{children}</em>
-                          ),
-                          code: ({ children }) => (
-                            <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">
-                              {children}
-                            </code>
-                          ),
-                        }}
-                      >
-                        {message.content}
-                      </ReactMarkdown>
-                    ) : (
-                      <div className="space-y-2">
-                        {Array.isArray(message.content) ? (
-                          message.content.map((item, index) => {
-                            if (item.type === "text") {
-                              return <p key={index}>{item.text}</p>;
-                            }
-                            if (item.type === "image") {
-                              return (
-                                <img
-                                  key={index}
-                                  src={item.image || "/placeholder.svg"}
-                                  alt="Uploaded pest"
-                                  className="max-w-full h-auto max-h-72 object-contain bg-background/50"
-                                />
-                              );
-                            }
-                            return null;
-                          })
-                        ) : (
-                          <p>{message.content}</p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
+      {/* Chat Window */}
+      {isChatOpen && (
+        <div
+          className={`fixed bottom-24 right-6 w-[380px] md:w-[420px] bg-background border border-border rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden transition-all duration-300 ${
+            isMinimized ? "h-16" : "h-[600px]"
+          } animate-zoom-in`}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 bg-accent border-b border-border">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-accent-foreground/10 flex items-center justify-center">
+                <Bot className="w-5 h-5 text-accent-foreground" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-accent-foreground">
+                  Scout
+                </h3>
+                <p className="text-xs text-accent-foreground/70">
+                  AI Pest Assistant
+                </p>
               </div>
             </div>
-          ))}
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* Image Preview */}
-        {uploadedImage && (
-          <div className="px-4 py-2 border-t border-border bg-secondary/10">
-            <div className="flex items-center gap-2 p-2 bg-card rounded-lg border border-border">
-              <img
-                src={uploadedImage}
-                alt="Preview"
-                className="w-12 h-12 object-cover rounded"
-              />
-              <span className="text-xs text-muted-foreground flex-1">
-                Image ready to send
-              </span>
+            <div className="flex items-center gap-1">
               <button
-                onClick={() => setUploadedImage(null)}
-                className="p-1 hover:bg-muted rounded transition-colors"
-                title="Remove image"
+                onClick={handleReset}
+                disabled={isLoading}
+                className="p-2 hover:bg-accent-foreground/10 rounded-lg transition-colors disabled:opacity-50"
+                title="Reset conversation"
               >
-                <X className="w-4 h-4" />
+                <RotateCcw className="w-4 h-4 text-accent-foreground" />
+              </button>
+              <button
+                onClick={() => setIsMinimized(!isMinimized)}
+                className="p-2 hover:bg-accent-foreground/10 rounded-lg transition-colors"
+                title={isMinimized ? "Expand" : "Minimize"}
+              >
+                <Minus className="w-4 h-4 text-accent-foreground" />
+              </button>
+              <button
+                onClick={() => setIsChatOpen(false)}
+                className="p-2 hover:bg-accent-foreground/10 rounded-lg transition-colors"
+                title="Close chat"
+              >
+                <X className="w-4 h-4 text-accent-foreground" />
               </button>
             </div>
           </div>
-        )}
 
-        {/* Input Area */}
-        <div className="p-4 border-t border-border bg-card/50">
-          <div className="flex items-end gap-2">
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) handleImageUpload(file);
-                if (fileInputRef.current) fileInputRef.current.value = "";
-              }}
-              accept="image/*"
-              className="hidden"
-            />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isLoading || isUploading}
-              className="p-3 bg-secondary hover:bg-secondary/80 text-secondary-foreground border border-border rounded-lg transition-colors disabled:opacity-50 flex-shrink-0"
-              title="Upload image"
-            >
-              <Upload className="w-5 h-5" />
-            </button>
-            <input
-              ref={inputRef}
-              type="text"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Type your message..."
-              className="flex-1 bg-background border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent transition-all text-foreground placeholder-muted-foreground"
-              disabled={isLoading}
-            />
-            <button
-              onClick={handleSendMessage}
-              disabled={isLoading || (!inputValue.trim() && !uploadedImage)}
-              className="p-3 bg-accent hover:bg-accent/90 text-accent-foreground rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
-              title="Send message"
-            >
-              {isLoading ? (
-                <div className="w-5 h-5 border-2 border-accent-foreground/30 border-t-accent-foreground rounded-full animate-spin" />
-              ) : (
-                <Send className="w-5 h-5" />
+          {/* Messages Area */}
+          {!isMinimized && (
+            <>
+              <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 bg-muted/20">
+                {messages.map((message) => (
+                  <div
+                    key={message.id}
+                    className={`flex gap-2 ${
+                      message.sender === "user"
+                        ? "justify-end"
+                        : "justify-start"
+                    }`}
+                  >
+                    {/* Bot Avatar */}
+                    {message.sender === "bot" && (
+                      <div className="flex-shrink-0">
+                        <div className="w-7 h-7 rounded-full bg-accent flex items-center justify-center">
+                          <Bot className="w-4 h-4 text-accent-foreground" />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Message Bubble */}
+                    <div
+                      className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${
+                        message.sender === "user"
+                          ? "bg-accent text-accent-foreground"
+                          : "bg-card text-card-foreground border border-border"
+                      }`}
+                    >
+                      {message.imageUrl && (
+                        <div className="mb-2 rounded-lg overflow-hidden">
+                          <img
+                            src={message.imageUrl}
+                            alt="Uploaded"
+                            className="max-w-full h-auto max-h-32 object-contain"
+                          />
+                        </div>
+                      )}
+                      {message.content === "typing" ? (
+                        <div className="flex gap-1 py-1">
+                          <div
+                            className="w-1.5 h-1.5 bg-current rounded-full animate-bounce"
+                            style={{ animationDelay: "0ms" }}
+                          />
+                          <div
+                            className="w-1.5 h-1.5 bg-current rounded-full animate-bounce"
+                            style={{ animationDelay: "150ms" }}
+                          />
+                          <div
+                            className="w-1.5 h-1.5 bg-current rounded-full animate-bounce"
+                            style={{ animationDelay: "300ms" }}
+                          />
+                        </div>
+                      ) : message.sender === "bot" ? (
+                        <ReactMarkdown
+                          components={{
+                            p: ({ children }) => (
+                              <p className="mb-1 last:mb-0">{children}</p>
+                            ),
+                            strong: ({ children }) => (
+                              <strong className="font-semibold">
+                                {children}
+                              </strong>
+                            ),
+                          }}
+                        >
+                          {message.content}
+                        </ReactMarkdown>
+                      ) : (
+                        <div className="space-y-2">
+                          {Array.isArray(message.content) ? (
+                            message.content.map((item, index) => {
+                              if (item.type === "text") {
+                                return <p key={index}>{item.text}</p>;
+                              }
+                              if (item.type === "image") {
+                                return (
+                                  <img
+                                    key={index}
+                                    src={item.image || "/placeholder.svg"}
+                                    alt="Uploaded pest"
+                                    className="max-w-full h-auto max-h-72 object-contain bg-background/50"
+                                  />
+                                );
+                              }
+                              return null;
+                            })
+                          ) : (
+                            <p>{message.content}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* User Avatar */}
+                    {message.sender === "user" && (
+                      <div className="flex-shrink-0">
+                        <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center">
+                          <User className="w-4 h-4 text-primary-foreground" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+                <div ref={messagesEndRef} />
+              </div>
+
+              {/* Image Preview */}
+              {uploadedImage && (
+                <div className="px-4 py-2 border-t border-border bg-muted/30">
+                  <div className="flex items-center gap-2 p-2 bg-card rounded-lg">
+                    <img
+                      src={uploadedImage}
+                      alt="Preview"
+                      className="w-10 h-10 object-cover rounded"
+                    />
+                    <span className="text-xs text-muted-foreground flex-1">
+                      Ready to send
+                    </span>
+                    <button
+                      onClick={() => setUploadedImage(null)}
+                      className="p-1 hover:bg-muted rounded"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
               )}
-            </button>
-          </div>
-        </div>
-      </div>
 
-      {/* Backdrop */}
-      {isChatOpen && (
-        <div
-          onClick={() => setIsChatOpen(false)}
-          className="fixed inset-0 bg-foreground/20 backdrop-blur-sm z-40 animate-fade-in"
-        />
+              {/* Input Area */}
+              <div className="p-3 border-t border-border bg-card">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleImageUpload(file);
+                      if (fileInputRef.current) fileInputRef.current.value = "";
+                    }}
+                    accept="image/*"
+                    className="hidden"
+                  />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isLoading || isUploading}
+                    className="p-2 bg-secondary hover:bg-secondary/80 text-secondary-foreground rounded-lg transition-colors disabled:opacity-50"
+                    title="Upload image"
+                  >
+                    <Upload className="w-4 h-4" />
+                  </button>
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyPress={handleKeyPress}
+                    placeholder="Ask about pests..."
+                    className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent transition-all"
+                    disabled={isLoading}
+                  />
+                  <button
+                    onClick={handleSendMessage}
+                    disabled={
+                      isLoading || (!inputValue.trim() && !uploadedImage)
+                    }
+                    className="p-2 bg-accent hover:bg-accent/90 text-accent-foreground rounded-lg transition-all disabled:opacity-50"
+                    title="Send"
+                  >
+                    {isLoading ? (
+                      <div className="w-4 h-4 border-2 border-accent-foreground/30 border-t-accent-foreground rounded-full animate-spin" />
+                    ) : (
+                      <Send className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       )}
+
+      {/* Floating Chat Button */}
+      <button
+        onClick={toggleChat}
+        className={`fixed bottom-6 right-6 z-40 bg-accent text-accent-foreground rounded-full p-4 shadow-2xl hover:scale-110 transition-all duration-300 group opacity-100 translate-y-0 `}
+        aria-label={isChatOpen ? "Close chat" : "Open chat with Scout"}
+      >
+        {isChatOpen ? (
+          <X className="w-6 h-6 transition-transform duration-300" />
+        ) : (
+          <MessageCircle className="w-6 h-6 group-hover:rotate-12 transition-transform duration-300" />
+        )}
+        {!isChatOpen && (
+          <div className="absolute -top-1 -right-1 w-3 h-3 bg-primary rounded-full animate-pulse" />
+        )}
+      </button>
     </>
   );
 }
